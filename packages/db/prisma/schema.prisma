@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AgentAttachment {
+  id         String    @id @default(cuid())
+  projectId  String?
+  runId      String?
+  name       String
+  storedPath String
+  mime       String
+  size       Int
+  createdAt  DateTime  @default(now())
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run        AgentRun? @relation(fields: [runId], references: [id])
+
+  @@index([projectId])
+  @@index([runId])
+}
+
+model AgentEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  seq       Int
+  type      String
+  data      Json
+  createdAt DateTime @default(now())
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, seq])
+}
+
+model AgentRun {
+  id          String            @id @default(cuid())
+  projectId   String
+  workspaceId String?
+  provider    String            @default("opencode")
+  model       String            @default("opencode/big-pickle")
+  task        String
+  status      String            @default("queued")
+  exitCode    Int?
+  error       String?
+  result      String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
+  sessionId   String?
+  promptId    String?
+  attachments AgentAttachment[]
+  events      AgentEvent[]
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspace   Workspace?        @relation(fields: [workspaceId], references: [id])
+  artifacts   Artifact[]
+
+  @@index([status, startedAt])
+  @@index([projectId, status])
+}
+
+model Artifact {
+  id         String    @id @default(cuid())
+  projectId  String?
+  runId      String?
+  messageId  String?
+  type       String
+  mimeType   String
+  filename   String
+  storageKey String
+  size       Int       @default(0)
+  width      Int?
+  height     Int?
+  status     String    @default("pending")
+  error      String?
+  metadata   Json?
+  prompt     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  project    Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run        AgentRun? @relation(fields: [runId], references: [id])
+
+  @@index([messageId])
+  @@index([projectId])
+  @@index([runId])
+}
+
+model ModelConfig {
+  id        String   @id @default(cuid())
+  provider  String   @default("opencode")
+  model     String   @unique
+  label     String?
+  apiKeyRef String?
+  isDefault Boolean  @default(false)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id                 String            @id @default(cuid())
+  name               String
+  description        String?
+  status             String            @default("active")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  publishedAt        DateTime?
+  publishedUrl       String?
+  ownerId            String?
+  subdomain          String?
+  publishProgress    Int?
+  publishStatus      String?
+  lastPublishedRunId String?
+  attachments        AgentAttachment[]
+  runs               AgentRun[]
+  artifacts          Artifact[]
+  owner              User?             @relation(fields: [ownerId], references: [id])
+  imports            ProjectImport[]
+  workspace          Workspace?
+
+  @@index([ownerId])
+  @@index([ownerId, createdAt])
+  @@index([subdomain])
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  avatarUrl String?
+  googleId  String?    @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  projects  Project[]
+  workspace Workspace?
+}
+
+model Workspace {
+  id             String     @id @default(cuid())
+  projectId      String?    @unique
+  containerId    String?
+  image          String     @default("aurex-workspace:latest")
+  status         String     @default("created")
+  resourceLimits Json?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  path           String?
+  ownerId        String?    @unique
+  runs           AgentRun[]
+  user           User?      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  project        Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+/// *
+///  * One codebase import (folder or zip upload) into a project workspace.
+///  * `steps` tracks real progress: [{key,label,status,at}]. `detected` holds the
+///  * technology detection result once analysis finishes.
+model ProjectImport {
+  id         String   @id @default(cuid())
+  projectId  String
+  mode       String   @default("zip")
+  status     String   @default("receiving")
+  error      String?
+  steps      Json?
+  detected   Json?
+  fileCount  Int      @default(0)
+  totalBytes Int      @default(0)
+  stagingDir String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status, updatedAt])
+}

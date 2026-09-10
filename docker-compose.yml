@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aurex-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aurex
+      POSTGRES_PASSWORD: aurex
+      POSTGRES_DB: aurex
+    ports:
+      - "5435:5432"
+    volumes:
+      - aurex-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aurex -d aurex"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  aurex-pgdata:

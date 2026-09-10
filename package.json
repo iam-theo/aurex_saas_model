@@ -1,0 +1,26 @@
+{
+  "name": "aurex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace @aurex/api",
+    "dev:worker": "npm run dev --workspace @aurex/worker",
+    "dev:web": "npm run dev --workspace @aurex/web",
+    "infra:up": "docker compose up -d postgres",
+    "db:push": "npm run db:push --workspace @aurex/db",
+    "db:seed": "npm run db:seed --workspace @aurex/db",
+    "workspace:build": "docker build -t aurex-workspace:latest docker/workspace",
+    "setup": "bash scripts/install.sh",
+    "setup:quick": "bash scripts/install.sh --skip-workspace",
+    "test": "node --import tsx --test packages/shared/test/*.test.ts",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

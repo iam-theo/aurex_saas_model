@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+data/
+packages/db/src/generated/
+# local overrides
+apps/web/.env
+*.tsbuildinfo
