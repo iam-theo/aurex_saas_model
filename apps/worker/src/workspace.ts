@@ -10,7 +10,8 @@ import {
   workspaceContainerName,
   type ResourceLimits,
 } from "@aurex/docker";
-import { projectWorkspacePath, WORKSPACE_ROOT, AUREX_AGENT_SYSTEM_PROMPT, AUREX_AGENT_FILE } from "@aurex/shared";
+import { projectWorkspacePath, WORKSPACE_ROOT } from "@aurex/shared";
+import { AUREX_AGENT_SYSTEM_PROMPT, AUREX_AGENT_FILE } from "@aurex/shared/agent-prompt";
 import { WORKSPACE_IMAGE } from "./config.js";
 
 async function ensureProjectFolder(workspace: {

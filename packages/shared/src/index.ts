@@ -4,23 +4,6 @@ export const RUN_TIMEOUT_MS_DEFAULT = 30 * 60 * 1000;
 
 export const WORKSPACE_ROOT = "/workspace";
 
-export { AUREX_AGENT_SYSTEM_PROMPT, AUREX_AGENT_FILE } from "./agent-prompt.js";
-
-// Prompt system
-export {
-  loadPromptFile,
-  discoverPrompts,
-  getPrompt,
-  getCorePrompts,
-  composeSystemPrompt,
-  detectTaskCategories,
-  getCapabilityPromptIds,
-  getWorkflowForTask,
-  buildSystemPromptForTask,
-  CORE_PROMPT_IDS,
-  ALL_PROMPTS,
-  type PromptMeta,
-} from "./prompts/prompts.js";
 export {
   ATTACHMENTS_SUBDIR,
   ALLOWED_ATTACHMENT_MIMES,
@@ -49,20 +32,7 @@ export {
   autoSelectModel,
   type AureXtraModel,
   type ModelCategory,
-} from "./openrouter-models.js";
-
-// AureXtra API client utilities
-export {
-  OPENROUTER_API_BASE,
-  isOpenRouterModel,
-  extractOpenRouterModelId,
-  createOpenRouterCompletion,
-  streamOpenRouterCompletion,
-  fetchOpenRouterFreeModels,
-  type OpenRouterMessage,
-  type OpenRouterRequest,
-  type OpenRouterResponse,
-} from "./openrouter.js";
+} from "./aurextra-models.js";
 
 // Artifact system
 export {

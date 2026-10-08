@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
 import { prisma } from "@aurex/db";
 import { REDIS_URL, RUN_TIMEOUT_MS } from "./config.js";
-import { processAgentRun, processChatMessage, processQuestionAnswer, processAbortRun, retryRun } from "./processRun.js";
+import { processAgentRun, processChatMessage, processQuestionAnswer, processAbortRun, retryRun, healOrphanWatchers, activeRuns, QUIET_COMPLETE_MS, type ActiveRunEntry } from "./processRun.js";
 import { ensureWorkspace, startWorkspaceById, stopWorkspaceById } from "./workspace.js";
 import { publishProject } from "./publish.js";
 
@@ -177,17 +177,54 @@ publishWorker.on("failed", (job, err) => {
   console.error(`[aurex-worker] publish job ${job?.data?.projectId} failed:`, err);
 });
 
-// Reaper: mark orphaned running runs as timeout after 2x RUN_TIMEOUT_MS (handles worker restarts)
-setInterval(async () => {
+// Self-heal first, reap second: re-attach watchers for running runs whose
+// watcher died (worker restart/crash), then reap only runs that STILL have no
+// live in-process watcher and have been running too long. Ordering matters —
+// healing first ensures an actively streaming run is never reaped in the
+// window between a worker restart and re-attach.
+async function healAndReap() {
+  try {
+    await healOrphanWatchers();
+  } catch (e) {
+    console.error("[aurex-worker] heal sweep failed:", e);
+  }
   try {
     const cutoff = new Date(Date.now() - RUN_TIMEOUT_MS * 2);
     const stale = await prisma.agentRun.findMany({ where: { status: "running", startedAt: { lt: cutoff } }, select: { id: true }, take: 20 });
     for (const r of stale) {
+      if (activeRuns.has(r.id)) continue;
       await prisma.agentRun.update({ where: { id: r.id }, data: { status: "timeout", error: `run timed out after ${RUN_TIMEOUT_MS * 2}ms (reaper)`, completedAt: new Date() } }).catch(() => {});
       console.warn(`[aurex-worker] reaped stale run ${r.id}`);
     }
-  } catch {}
+  } catch (e) {
+    console.error("[aurex-worker] reaper sweep failed:", e);
+  }
+}
+
+// Immediate heal on boot: after a crash/restart, live runs must get their
+// watchers re-attached before the reaper can time them out.
+void healAndReap();
+
+setInterval(() => {
+  void healAndReap();
 }, 120_000).unref();
+
+// Quiet-completion sweep: a run is done once its agent session has produced no
+// events for QUIET_COMPLETE_MS. This drives the "running -> completed" flip even
+// when opencode's explicit idle events are never delivered and when the event
+// stream itself silently drops — the two failure modes that left chat inputs
+// locked behind a permanently-"running" run.
+setInterval(() => {
+  const now = Date.now();
+  for (const [runId, entry] of activeRuns) {
+    const e = entry as ActiveRunEntry;
+    if (!e.completeIfIdle || !e.lastEventAt) continue;
+    if (now - e.lastEventAt > QUIET_COMPLETE_MS) {
+      e.lastEventAt = now; // prevent re-firing every tick
+      void e.completeIfIdle().catch(() => {});
+    }
+  }
+}, 10_000).unref();
 
 // Retention: prune events beyond 500 per run (keeps DB bounded) — paginated, sampled, and rate-limited
 setInterval(async () => {

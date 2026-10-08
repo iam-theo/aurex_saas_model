@@ -56,35 +56,47 @@ function b64url(buf: Buffer): string {
   return buf.toString("base64url");
 }
 
-function signSession(userId: string): string {
-  const body = b64url(
-    Buffer.from(JSON.stringify({ sub: userId, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S })),
-  );
-  const sig = createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
-  return `${body}.${sig}`;
+/** Signs a JWT (RS256-like HS256) with the session secret. Returns `header.payload.signature`. */
+function jwtSign(payload: Record<string, unknown>): string {
+  const header = b64url(Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })));
+  const body = b64url(Buffer.from(JSON.stringify(payload)));
+  const sig = createHmac("sha256", SESSION_SECRET).update(`${header}.${body}`).digest("base64url");
+  return `${header}.${body}.${sig}`;
 }
 
-function verifySession(token: string): string | null {
-  const dot = token.lastIndexOf(".");
-  if (dot === -1) return null;
-  const body = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  if (!body || !sig) return null;
-  const expected = createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+function jwtVerify(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [header, body, sig] = parts;
+  const expected = createHmac("sha256", SESSION_SECRET).update(`${header}.${body}`).digest("base64url");
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as {
-      sub?: string;
-      exp?: number;
-    };
-    if (typeof payload.sub !== "string") return null;
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as Record<string, unknown>;
     if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) return null;
-    return payload.sub;
+    return payload;
   } catch {
     return null;
   }
+}
+
+/** Sign a session JWT for a user id. */
+function signSession(userId: string, name?: string | null, email?: string | null): string {
+  return jwtSign({
+    sub: userId,
+    ...(name ? { name } : {}),
+    ...(email ? { email } : {}),
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + SESSION_TTL_S,
+  });
+}
+
+function verifySession(token: string): string | null {
+  const payload = jwtVerify(token);
+  if (!payload) return null;
+  if (typeof payload.sub !== "string") return null;
+  return payload.sub;
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -269,12 +281,25 @@ export async function exchangeGoogleCode(
   let user = await prisma.user.findFirst({ where: { OR: [{ googleId }, { email: info.email }] } });
   if (!user) {
     user = await prisma.user.create({
-      data: { googleId, email: info.email, name: info.name ?? null, avatarUrl: info.picture ?? null },
+      data: {
+        googleId,
+        email: info.email,
+        name: info.name ?? null,
+        avatarUrl: info.picture ?? null,
+        emailVerified: true,
+      },
     });
   } else {
     user = await prisma.user.update({
       where: { id: user.id },
-      data: { googleId, email: info.email, name: info.name ?? user.name, avatarUrl: info.picture ?? user.avatarUrl },
+      data: {
+        googleId,
+        email: info.email,
+        name: info.name ?? user.name,
+        avatarUrl: info.picture ?? user.avatarUrl,
+        // A verified Google address means the email is under the user's control.
+        emailVerified: true,
+      },
     });
   }
   return { user: { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl } };
@@ -318,8 +343,13 @@ export function isSessionToken(req: Request): boolean {
   return Boolean(cookies[SESSION_COOKIE]);
 }
 
-export function issueSession(res: Response, userId: string) {
-  setSessionCookie(res, signSession(userId));
+export function issueSession(res: Response, userId: string, opts?: { name?: string | null; email?: string | null }) {
+  setSessionCookie(res, signSession(userId, opts?.name, opts?.email));
+}
+
+/** Raw JWT (HS256) for the SPA to hold as a bearer token if it wants it. */
+export function signAccessToken(userId: string, opts?: { name?: string | null; email?: string | null }): string {
+  return signSession(userId, opts?.name, opts?.email);
 }
 
 export function clearSession(res: Response) {

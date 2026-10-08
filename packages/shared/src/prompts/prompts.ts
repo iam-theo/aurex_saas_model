@@ -103,7 +103,7 @@ export function composeSystemPrompt(includeCore: boolean = true, capabilityIds: 
 const TASK_CATEGORY_KEYWORDS: Record<string, string[]> = {
   frontend: ["react", "vue", "angular", "css", "html", "tailwind", "component", "ui", "frontend", "website", "design"],
   backend: ["api", "server", "database", "sql", "express", "nest", "rest", "graphql", "backend"],
-  coding: ["write code", "implement", "function", "class", "module", "typescript", "javascript", "python", "go", "rust"],
+  coding: ["write code", "implement", "function", "class", "module", "typescript", "javascript", "python", "go", "rust", "add", "create", "make", "edit", "modify", "change", "update", "refactor", "build"],
   research: ["research", "investigate", "find", "look up", "search for", "what is", "how does"],
   analysis: ["analyze", "review", "assess", "evaluate", "audit", "inspect"],
   documentation: ["document", "docs", "explain", "comment", "write a guide"],

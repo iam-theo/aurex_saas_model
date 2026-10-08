@@ -13,11 +13,13 @@
     "@aurex/docker": "*",
     "@aurex/shared": "*",
     "@prisma/client": "^6.1.0",
+    "@types/nodemailer": "^8.0.1",
     "bullmq": "^5.34.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "ioredis": "^5.4.2",
-    "multer": "^2.2.0"
+    "multer": "^2.2.0",
+    "nodemailer": "^10.0.8"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

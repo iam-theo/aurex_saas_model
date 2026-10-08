@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ALL_PROMPTS, getPrompt, type PromptMeta } from "@aurex/shared";
+import { ALL_PROMPTS, getPrompt, type PromptMeta } from "@aurex/shared/prompts";
 
 const router = Router();
 

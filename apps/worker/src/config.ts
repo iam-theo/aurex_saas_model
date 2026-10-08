@@ -15,7 +15,6 @@ export const RUN_TIMEOUT_MS = parseRunTimeout();
 export const API_URL = process.env.API_URL ?? "http://localhost:4010";
 export const INTERNAL_KEY = process.env.AUREX_INTERNAL_KEY ?? "";
 if (!INTERNAL_KEY) console.warn("[config] AUREX_INTERNAL_KEY not set — auto-publish disabled");
-export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY ?? "";
 export const HOST_MODE = process.env.AUREX_HOST_MODE === "true" || process.env.AUREX_EXEC_MODE === "host";
 export const HOST_ROOT = process.env.AUREX_HOST_ROOT ?? "/";
 if (HOST_MODE) console.log(`[config] HOST MODE enabled — workspaces run directly on host at ${HOST_ROOT}`);

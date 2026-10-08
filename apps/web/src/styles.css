@@ -2014,6 +2014,105 @@ select {
   margin-bottom: 10px;
 }
 
+/* --- auth: email/password form ------------------------------------------ */
+
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 9px;
+  text-align: center;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--t);
+}
+.auth-tab:hover {
+  color: var(--text-2);
+}
+.auth-tab.active {
+  background: var(--surface-4);
+  color: var(--text-1);
+}
+
+.auth-form .field {
+  margin-bottom: 12px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.form-error {
+  color: #ff7b7b;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 2px 0 4px;
+}
+.form-success {
+  color: #6ee7a6;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 2px 0 10px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: 12px;
+  margin: 18px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.link-btn {
+  display: inline-block;
+  margin-top: 16px;
+  background: none;
+  border: none;
+  color: var(--brand-1);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.login-verify {
+  text-align: center;
+}
+.login-verify .lead strong {
+  color: var(--text-1);
+  word-break: break-all;
+}
+.login-verify .form-error,
+.login-verify .form-success {
+  text-align: center;
+}
+
 @media (max-width: 820px) {
   .login-shell {
     grid-template-columns: 1fr;

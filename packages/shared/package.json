@@ -8,7 +8,9 @@
     "./attachments": "./src/attachments.ts",
     "./import": "./src/import.ts",
     "./project-detect": "./src/project-detect.ts",
-    "./prompts/prompts": "./src/prompts/prompts.ts"
+    "./prompts": "./src/prompts/prompts.ts",
+    "./prompts/prompts": "./src/prompts/prompts.ts",
+    "./agent-prompt": "./src/agent-prompt.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

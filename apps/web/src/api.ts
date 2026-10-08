@@ -175,13 +175,17 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    if (res.status === 401 && window.location.pathname !== "/login") {
-      window.location.href = "/login";
+if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401 && window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+      const err = new Error((body as { error?: string }).error ?? `Request failed: ${res.status}`) as Error & {
+        status?: number;
+      };
+      err.status = res.status;
+      throw err;
     }
-    throw new Error((body as { error?: string }).error ?? `Request failed: ${res.status}`);
-  }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -337,11 +341,31 @@ export const api = {
   authStatus: () =>
     req<{
       configured: boolean;
+      emailAuth: boolean;
       authenticated: boolean;
       user: { id: string; email: string; name: string | null; avatarUrl: string | null } | null;
       redirectUri: string | null;
     }>("/auth/status"),
   logout: () => req<{ ok: boolean }>("/auth/logout", { method: "POST", body: JSON.stringify({}) }),
+  signup: (name: string, email: string, password: string) =>
+    req<{ ok: boolean; email: string; sent: boolean }>("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify({ name, email, password }),
+    }),
+  login: (email: string, password: string) =>
+    req<{ ok: boolean; user: { id: string; email: string; name: string | null; avatarUrl: string | null }; token: string }>(
+      "/auth/login",
+      { method: "POST", body: JSON.stringify({ email, password }) },
+    ),
+  verifyEmail: (token: string) =>
+    req<{ ok: boolean; user: { id: string; email: string; name: string | null; avatarUrl: string | null } }>(
+      `/auth/verify?token=${encodeURIComponent(token)}`,
+    ),
+  resendVerification: (email: string) =>
+    req<{ ok: boolean; sent: boolean }>("/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
 
   // Artifact methods
   listArtifacts: (projectId: string) =>

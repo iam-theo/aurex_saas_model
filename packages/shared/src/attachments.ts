@@ -26,9 +26,9 @@ export const ATTACHMENTS_SUBDIR = ".aurex/attachments";
 
 /**
  * Vision-capable default used when a run/chat message includes an image but
- * the selected model cannot see images natively. Uses OpenRouter vision model.
+ * the selected model cannot see images natively.
  */
-export const DEFAULT_VISION_MODEL = "openrouter/nvidia/nemotron-nano-12b-v2-vl:free";
+export const DEFAULT_VISION_MODEL = "opencode/kimi-k2.5-free";
 
 export const ALLOWED_ATTACHMENT_MIMES = [
   "image/png",
@@ -53,9 +53,9 @@ export function attachmentContainerPath(directory: string, attachmentId: string,
 }
 
 /**
- * Model input capabilities. Free opencode Zen models and OpenRouter models
- * that accept images are listed explicitly; paid BYOK providers (OpenAI/
- * Anthropic/Google) accept images and PDFs. Everything else is text-only.
+ * Model input capabilities. Free opencode Zen models that accept images are
+ * listed explicitly; paid BYOK providers (OpenAI/Anthropic/Google) accept
+ * images and PDFs. Everything else is text-only.
  */
 const VISION_IMAGE_MODELS = new Set([
   // OpenCode Zen models
@@ -69,11 +69,6 @@ const VISION_IMAGE_MODELS = new Set([
   "mimo-v2.5-free",
   "minimax-m3",
   "minimax-m3-free",
-  // OpenRouter free models (vision-capable)
-  "nvidia/nemotron-nano-12b-v2-vl:free",
-  "nvidia/nemotron-3.5-content-safety:free",
-  "dots-studio/dots-3-note-preview:free",
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
 ]);
 
 const NATIVE_PDF_MODELS = new Set([
@@ -104,10 +99,6 @@ const NATIVE_PDF_MODELS = new Set([
   "claude-sonnet-4-6",
   "claude-sonnet-5",
   "claude-3-5-haiku",
-  // OpenRouter free models with PDF support
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-  "google/gemma-4-26b-a4b-it:free",
-  "google/gemma-4-31b-it:free",
 ]);
 
 /** Extract the bare model id from a `provider/model` string. */
@@ -128,13 +119,6 @@ export function modelCapabilities(model: string): ModelCapabilities {
   // BYOK providers always support image and PDF
   if (provider === "openai" || provider === "anthropic" || provider === "google" || provider === "gemini") {
     return { image: true, pdf: true };
-  }
-
-  // OpenRouter models - check against full model ID
-  if (provider === "openrouter") {
-    const image = VISION_IMAGE_MODELS.has(id);
-    const pdf = NATIVE_PDF_MODELS.has(id);
-    return { image, pdf };
   }
 
   // OpenCode models - check against bare model name

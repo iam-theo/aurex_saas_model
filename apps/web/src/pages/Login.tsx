@@ -1,5 +1,7 @@
-import { Link } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { api } from "../api";
 
 function GoogleIcon() {
   return (
@@ -24,8 +26,71 @@ function GoogleIcon() {
   );
 }
 
+type Mode = "signin" | "signup";
+type Stage = "form" | "verifying";
+
 export default function Login() {
-  const { configured } = useAuth();
+  const { configured, refresh } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? "/dashboard";
+
+  const [mode, setMode] = useState<Mode>("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
+    setPendingEmail(null);
+    setResent(false);
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      if (mode === "signup") {
+        await api.signup(name, email, password);
+        setPendingEmail(email);
+      } else {
+        await api.login(email, password);
+        await refresh();
+        navigate(from, { replace: true });
+      }
+    } catch (err) {
+      const e2 = err as { status?: number; message: string };
+      if (mode === "signin" && e2.status === 403) {
+        // Email registered but not verified yet — offer resend.
+        setPendingEmail(email);
+      } else {
+        setError(e2.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend() {
+    if (!pendingEmail) return;
+    setResending(true);
+    setResent(false);
+    try {
+      await api.resendVerification(pendingEmail);
+      setResent(true);
+    } catch (err) {
+      setError((err as { message: string }).message);
+    } finally {
+      setResending(false);
+    }
+  }
 
   return (
     <div className="login-wrap">
@@ -80,30 +145,121 @@ export default function Login() {
         </div>
 
         <div className="login-panel">
-          {configured ? (
-            <>
-              <h2>Sign in to Aurex</h2>
-              <p className="lead">Use your Google account to continue.</p>
-              <a className="google-btn" href="/api/auth/google">
-                <GoogleIcon />
-                Continue with Google
-              </a>
-              <p className="login-note">
-                Your workspaces, runs, and files stay private to your account.
-              </p>
-            </>
-          ) : (
+          {!configured ? (
             <div className="login-open">
               <h2>Sign in isn't configured</h2>
               <p className="lead">
-                The platform is running in open (no-auth) mode. Set{" "}
-                <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> in the server
-                env to enable it.
+                The platform is running in open (no-auth) mode. Set the auth env vars on the server
+                to enable it.
               </p>
               <Link to="/dashboard" className="btn btn-secondary btn-lg">
                 Continue without sign-in
               </Link>
             </div>
+          ) : pendingEmail ? (
+            <div className="login-verify">
+              <h2>{mode === "signup" ? "Check your inbox" : "Verify your email"}</h2>
+              <p className="lead">
+                We emailed a verification link to <strong>{pendingEmail}</strong>. Click it to{" "}
+                {mode === "signup" ? "finish creating your account" : "sign in"}.
+              </p>
+              {resent && <p className="form-success">Verification email re-sent.</p>}
+              {error && <p className="form-error">{error}</p>}
+              <button className="btn btn-primary btn-block" onClick={() => void resend()} disabled={resending}>
+                {resending ? "Sending…" : "Resend email"}
+              </button>
+              <button className="link-btn" onClick={() => setPendingEmail(null)}>
+                Change email address
+              </button>
+            </div>
+          ) : (
+            <>
+              <h2>{mode === "signup" ? "Create your account" : "Sign in to Aurex"}</h2>
+              <p className="lead">
+                {mode === "signup"
+                  ? "Your email will be verified before you can sign in."
+                  : "Welcome back — sign in with email or Google."}
+              </p>
+
+              <div className="auth-tabs">
+                <button className={`auth-tab ${mode === "signin" ? "active" : ""}`} onClick={() => switchMode("signin")}>
+                  Sign in
+                </button>
+                <button className={`auth-tab ${mode === "signup" ? "active" : ""}`} onClick={() => switchMode("signup")}>
+                  Create account
+                </button>
+              </div>
+
+              <form className="auth-form" onSubmit={onSubmit}>
+                {mode === "signup" && (
+                  <label className="field">
+                    <span>Name</span>
+                    <input
+                      className="input"
+                      type="text"
+                      name="name"
+                      autoComplete="name"
+                      placeholder="Your full name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      minLength={2}
+                      maxLength={80}
+                    />
+                  </label>
+                )}
+                <label className="field">
+                  <span>Email</span>
+                  <input
+                    className="input"
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Password</span>
+                  <input
+                    className="input"
+                    type="password"
+                    name="password"
+                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                    placeholder={mode === "signup" ? "At least 8 characters" : "Your password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                  />
+                </label>
+
+                {error && <p className="form-error">{error}</p>}
+
+                <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
+                  {busy
+                    ? mode === "signup"
+                      ? "Creating account…"
+                      : "Signing in…"
+                    : mode === "signup"
+                      ? "Create account"
+                      : "Sign in"}
+                </button>
+              </form>
+
+              <div className="divider">or</div>
+
+              <a className="google-btn" href="/api/auth/google">
+                <GoogleIcon />
+                Continue with Google
+              </a>
+
+              <p className="login-note">
+                Your workspaces, runs, and files stay private to your account.
+              </p>
+            </>
           )}
         </div>
       </div>

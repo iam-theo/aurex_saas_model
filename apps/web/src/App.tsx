@@ -8,6 +8,7 @@ const EnvVars = lazy(() => import("./pages/EnvVars"));
 const Github = lazy(() => import("./pages/Github"));
 const Models = lazy(() => import("./pages/Models"));
 const Login = lazy(() => import("./pages/Login"));
+const Verify = lazy(() => import("./pages/Verify"));
 const Landing = lazy(() => import("./pages/Landing"));
 const LegalPage = lazy(() => import("./pages/Legal"));
 const DeleteApp = lazy(() => import("./pages/DeleteApp"));
@@ -98,7 +99,8 @@ function AppRoutes() {
   const onPublic =
     isLanding ||
     isLegal ||
-    location.pathname === "/login";
+    location.pathname === "/login" ||
+    location.pathname === "/auth/verify";
   if (configured && !authenticated && !onPublic) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
@@ -111,6 +113,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/verify" element={<Verify />} />
         <Route path="/privacy" element={<LegalPage kind="privacy" />} />
         <Route path="/terms" element={<LegalPage kind="terms" />} />
         <Route path="/dashboard" element={<Dashboard />} />

@@ -24,14 +24,12 @@ const OPENCODE_MODELS = [
 ];
 
 function aureXtraToModelInfo(model: AureXtraModel) {
-  // ids that already carry a provider (e.g. "opencode/x-preview-f-free") are
-  // native opencode API models; everything else is reached via OpenRouter.
-  const isOpencode = model.id.startsWith("opencode/");
-  const id = isOpencode ? model.id : `openrouter/${model.id}`;
+  // All registry ids are native opencode API models.
+  const id = model.id;
   const caps = modelCapabilities(id);
   return {
     id,
-    provider: isOpencode ? "opencode" : "openrouter",
+    provider: "opencode",
     label: model.name,
     builtin: true,
     local: false,

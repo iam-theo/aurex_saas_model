@@ -448,7 +448,7 @@ Aurex never lets an agent run arbitrary commands on your host.
 
 The MVP proves the core concept. Roadmap ideas from the original spec:
 
-- **Model gateway expansion** — Ollama local models, OpenRouter, Gemini, etc.
+- **Model gateway expansion** — Ollama local models, Gemini, etc.
 - **Aurex agent core** — progressively replace the opencode dependency with
   Aurex's own orchestration.
 - **AI workforce** — specialist workers (Developer, QA, Data, DevOps) each with

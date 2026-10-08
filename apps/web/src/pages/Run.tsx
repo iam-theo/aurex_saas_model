@@ -298,52 +298,8 @@ function ToolInline({ evt, live }: { evt: LiveEvent; live: boolean }) {
 
 // --- chat message renderers --------------------------------------------------
 
-function ThinkingBlock({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ paddingLeft: 24, marginTop: 8 }}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          background: "transparent",
-          border: "none",
-          fontFamily: F.code,
-          fontSize: 11,
-          color: C.onSurfaceVariant,
-          cursor: "pointer",
-          padding: "2px 0",
-        }}
-      >
-        <Icon name={open ? "expand_less" : "expand_more"} size={13} color="currentColor" />
-        Thinking
-      </button>
-      {open && (
-        <div
-          style={{
-            marginTop: 6,
-            padding: "10px 14px",
-            background: C.surfaceContainerLow,
-            borderRadius: 6,
-            fontSize: 13,
-            lineHeight: 1.6,
-            color: C.onSurfaceVariant,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {text}
-        </div>
-      )}
-    </div>
-  );
-}
-
 type AgentBlock =
   | { kind: "text"; text: string }
-  | { kind: "reasoning"; text: string }
   | { kind: "tool"; evt: LiveEvent }
   | { kind: "step_start" }
   | { kind: "step_finish"; reason?: string }
@@ -352,12 +308,9 @@ type AgentBlock =
 function buildAgentBlocks(events: LiveEvent[]): AgentBlock[] {
   const out: AgentBlock[] = [];
   let textBuf = "";
-  let reasonBuf = "";
   const flush = () => {
     if (textBuf.trim()) out.push({ kind: "text", text: textBuf.trim() });
-    if (reasonBuf.trim()) out.push({ kind: "reasoning", text: reasonBuf.trim() });
     textBuf = "";
-    reasonBuf = "";
   };
   for (const evt of events) {
     const ptype = evt.data.part?.type;
@@ -385,8 +338,7 @@ function buildAgentBlocks(events: LiveEvent[]): AgentBlock[] {
       flush();
       out.push({ kind: "step_finish", reason: evt.data.part?.reason });
     } else if (evt.type === "reasoning" || ptype === "reasoning") {
-      flush();
-      reasonBuf = (evt.data.part?.text ?? evt.data.text ?? "") + "\n";
+      continue;
     } else {
       const t =
         evt.type === "text"
@@ -441,7 +393,6 @@ function AgentMessage({ events, live, projectId }: { events: LiveEvent[]; live: 
             </div>
           );
         }
-        if (b.kind === "reasoning") return <ThinkingBlock key={i} text={b.text} />;
         if (b.kind === "tool") return <ToolInline key={i} evt={b.evt} live={live} />;
         if (b.kind === "artifact" && projectId) {
           return <div key={i} style={{ paddingLeft: 24, marginBottom: 12 }}><ImageArtifact artifact={b.artifact} projectId={projectId} /></div>;
@@ -1164,6 +1115,21 @@ export default function Run() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [metrics, setMetrics] = useState<{ cpuPct: number | null; memUsed: number | null; memLimit: number | null; pids: number | null; uptimeSeconds: number | null; status: string | null } | null>(null);
 
+  // Agent-idle detection: last time an agent event arrived + a 1s ticking clock.
+  // Used to unlock the chat input once the agent finishes responding, so a run
+  // that the backend marks "running" (or that never receives a completion event)
+  // does not permanently block the user from typing.
+  const lastEventAtRef = useRef<number>(Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    lastEventAtRef.current = Date.now();
+  }, [events]);
+  const AGENT_IDLE_MS = 8000;
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -1413,7 +1379,12 @@ export default function Run() {
   const finished = ["completed", "failed", "cancelled", "timeout"].includes(status);
   const live = connected && !finished;
   const awaitingAnswer = questions.length > 0;
-  const chatLocked = awaitingAnswer || status === "queued" || status === "running" || sending;
+  // While "running", treat the agent as busy only if events arrived recently.
+  // Once the agent goes quiet (finished responding), unlock the input so the
+  // user can type again — even if the backend status has not flipped to a
+  // terminal state yet.
+  const agentIdle = status === "running" && now - lastEventAtRef.current >= AGENT_IDLE_MS;
+  const chatLocked = awaitingAnswer || status === "queued" || (status === "running" && !agentIdle) || sending;
   const caps = modelCapabilities(run.model);
   const chatExtract = chatAttachments.some(
     (a) => (a.modality === "image" && !caps.image) || (a.modality === "pdf" && !caps.pdf),

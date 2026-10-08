@@ -23,10 +23,10 @@ import {
  */
 export function resolveModel(model: string, task: string, attachments: AttachmentInfo[]): string {
   // Auto-select: analyze task and pick the best category model
-  if (model === AUTO_MODEL_ID || model === "openrouter/aurextra/auto") {
+  if (model === AUTO_MODEL_ID) {
     const selection = autoSelectModel(task);
-    // provider-qualified ids (e.g. "opencode/x-preview-f-free") pass through as-is
-    model = selection.model.startsWith("opencode/") ? selection.model : `openrouter/${selection.model}`;
+    // registry ids are provider-qualified (e.g. "opencode/deepseek-v4-flash-free")
+    model = selection.model.startsWith("opencode/") ? selection.model : `opencode/${selection.model}`;
   }
 
   // Vision fallback: if there are images and the model can't see them

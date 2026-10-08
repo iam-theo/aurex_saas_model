@@ -1,7 +1,7 @@
 /**
  * AureXtra free models registry with categorization.
  * Models organized by use case for the agent execution platform.
- * All models have $0 pricing for prompt and completion.
+ * All models are served natively by the opencode API.
  */
 
 export type ModelCategory =
@@ -26,7 +26,16 @@ export interface AureXtraModel {
 export const AUREXTRA_MODELS: AureXtraModel[] = [
   // === CODING AGENTS ===
   {
-    id: "poolside/laguna-s-2.1:free",
+    id: "opencode/deepseek-v4-flash-free",
+    name: "Deepseek V4 Flash",
+    category: "coding",
+    contextLength: 131072,
+    modality: "text->text",
+    inputModalities: ["text"],
+    description: "Fast, high-quality code generation and analysis",
+  },
+  {
+    id: "opencode/laguna-s-2.1-free",
     name: "Laguna S 2.1",
     category: "coding",
     contextLength: 262144,
@@ -34,135 +43,54 @@ export const AUREXTRA_MODELS: AureXtraModel[] = [
     inputModalities: ["text"],
     description: "High-quality code generation model",
   },
-  {
-    id: "poolside/laguna-xs-2.1:free",
-    name: "Laguna XS 2.1",
-    category: "coding",
-    contextLength: 262144,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Lightweight code generation model",
-  },
-  {
-    id: "cohere/north-mini-code:free",
-    name: "North Mini Code",
-    category: "coding",
-    contextLength: 256000,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Specialized code generation and analysis",
-  },
-  {
-    id: "z-ai/glm-5.2:free",
-    name: "GLM 5.2",
-    category: "coding",
-    contextLength: 256000,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Advanced code understanding and generation",
-  },
-  {
-    // Served by the opencode API itself (not OpenRouter): `opencode models` lists x-preview-f-free
-    id: "opencode/x-preview-f-free",
-    name: "Ox Alpha",
-    category: "coding",
-    contextLength: 131072,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "High-performance coding assistant with strong reasoning",
-  },
 
   // === REASONING / ORCHESTRATION ===
   {
-    id: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    name: "Nemotron 3 Ultra",
+    id: "opencode/big-pickle",
+    name: "BigPickle",
     category: "reasoning",
-    contextLength: 1000000,
+    contextLength: 131072,
     modality: "text->text",
     inputModalities: ["text"],
-    description: "550B parameter model for complex reasoning tasks",
-  },
-  {
-    id: "dots-studio/dots-3-note-preview:free",
-    name: "Dots3-Note Preview",
-    category: "reasoning",
-    contextLength: 512000,
-    modality: "text+image->text",
-    inputModalities: ["text", "image"],
-    description: "Note-taking with reasoning capabilities",
-  },
-  {
-    id: "nvidia/nemotron-3.5-lightning:free",
-    name: "Nemotron 3.5 Lightning",
-    category: "reasoning",
-    contextLength: 1000000,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Fast reasoning with 1M context window",
+    description: "Flagship model for complex reasoning and orchestration",
   },
 
   // === MULTIMODAL / PERCEPTION ===
   {
-    id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-    name: "Nemotron 3 Nano Omni",
+    id: "opencode/kimi-k2.5-free",
+    name: "Kimi K2.5",
     category: "multimodal",
-    contextLength: 256000,
-    modality: "text+image+audio+video->text",
-    inputModalities: ["text", "image", "audio", "video"],
-    description: "True multimodal: text, image, audio, and video",
-  },
-
-  // === RAG / RETRIEVAL ===
-  {
-    id: "nvidia/nemotron-3-super-120b-a12b:free",
-    name: "Nemotron 3 Super",
-    category: "rag",
-    contextLength: 262144,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Strong retrieval and context understanding",
-  },
-
-  // === SAFETY / GUARDRAILS ===
-  {
-    id: "nvidia/nemotron-3.5-content-safety:free",
-    name: "Nemotron 3.5 Content Safety",
-    category: "safety",
-    contextLength: 128000,
+    contextLength: 131072,
     modality: "text+image->text",
     inputModalities: ["text", "image"],
-    description: "Content safety classification and filtering",
-  },
-
-  // === AUDIO / VISION ===
-  {
-    id: "nvidia/nemotron-nano-12b-v2-vl:free",
-    name: "Nemotron Nano 12B VL",
-    category: "audio",
-    contextLength: 128000,
-    modality: "text+image+video->text",
-    inputModalities: ["text", "image", "video"],
-    description: "Vision-language model with video understanding",
-  },
-
-  // === LIGHTWEIGHT / EXTRACTION ===
-  {
-    id: "liquid/lfm-2.5-2.6b:free",
-    name: "LFM2.5-2.6B",
-    category: "lightweight",
-    contextLength: 128000,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Ultra-fast 2.6B parameter model for extraction",
+    description: "Vision-language model with strong reasoning",
   },
   {
-    id: "nvidia/nemotron-nano-9b-v2:free",
-    name: "Nemotron Nano 9B V2",
-    category: "lightweight",
-    contextLength: 128000,
-    modality: "text->text",
-    inputModalities: ["text"],
-    description: "Fast 9B model for quick tasks",
+    id: "opencode/qwen3.6-plus-free",
+    name: "Qwen 3.6 Plus",
+    category: "multimodal",
+    contextLength: 131072,
+    modality: "text+image->text",
+    inputModalities: ["text", "image"],
+    description: "Vision-language model with broad knowledge",
+  },
+  {
+    id: "opencode/mimo-v2.5-free",
+    name: "MiMo V2.5",
+    category: "multimodal",
+    contextLength: 131072,
+    modality: "text+image->text",
+    inputModalities: ["text", "image"],
+    description: "Vision-language model for image understanding",
+  },
+  {
+    id: "opencode/minimax-m3-free",
+    name: "MiniMax M3",
+    category: "multimodal",
+    contextLength: 131072,
+    modality: "text+image->text",
+    inputModalities: ["text", "image"],
+    description: "Vision-language model with multimodal understanding",
   },
 ];
 
@@ -203,7 +131,7 @@ export const CATEGORY_INFO: Record<ModelCategory, { label: string; description: 
   },
   multimodal: {
     label: "Multimodal",
-    description: "Text, image, audio, and video understanding",
+    description: "Text, image, and visual understanding",
     icon: "devices",
   },
   rag: {
@@ -229,13 +157,13 @@ export const CATEGORY_INFO: Record<ModelCategory, { label: string; description: 
 };
 
 export const DEFAULT_MODEL_PER_CATEGORY: Record<ModelCategory, string> = {
-  coding: "opencode/x-preview-f-free",
-  reasoning: "nvidia/nemotron-3-ultra-550b-a55b:free",
-  multimodal: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-  rag: "nvidia/nemotron-3-super-120b-a12b:free",
-  safety: "nvidia/nemotron-3.5-content-safety:free",
-  audio: "nvidia/nemotron-nano-12b-v2-vl:free",
-  lightweight: "liquid/lfm-2.5-2.6b:free",
+  coding: "opencode/deepseek-v4-flash-free",
+  reasoning: "opencode/big-pickle",
+  multimodal: "opencode/kimi-k2.5-free",
+  rag: "opencode/big-pickle",
+  safety: "opencode/big-pickle",
+  audio: "opencode/minimax-m3-free",
+  lightweight: "opencode/deepseek-v4-flash-free",
 };
 
 export const CATEGORY_PRIORITY: ModelCategory[] = [

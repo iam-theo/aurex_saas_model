@@ -16,7 +16,7 @@ const HOST_ROOT = (() => {
   }
   return _rawRoot;
 })();
-function toHostDir(dir: string): string {
+export function toHostDir(dir: string): string {
   if (!HOST_MODE) return dir;
   if (dir.startsWith("/workspace")) {
     const rel = dir.slice("/workspace".length) || "/";
@@ -126,7 +126,6 @@ export async function ensureServeRunning(containerName: string): Promise<void> {
     const env: Record<string,string> = {};
     if (process.env.OPENAI_API_KEY) env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
     if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-    if (process.env.OPENROUTER_API_KEY) env.OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
     // ensure config dir on host
     const { mkdirSync, writeFileSync, existsSync } = await import("node:fs");
     const { homedir } = await import("node:os");
@@ -135,7 +134,7 @@ export async function ensureServeRunning(containerName: string): Promise<void> {
     try { mkdirSync(cfgDir, { recursive: true }); } catch {}
     const cfgPath = join(cfgDir, "opencode.json");
     if (!existsSync(cfgPath)) {
-      try { writeFileSync(cfgPath, JSON.stringify({ $schema:"https://opencode.ai/config.json", provider:{ openrouter:{} } }, null, 2)); } catch {}
+      try { writeFileSync(cfgPath, JSON.stringify({ $schema:"https://opencode.ai/config.json" }, null, 2)); } catch {}
     }
     // spawn opencode serve detached on host — use absolute binary path (PM2 PATH lacks .npm-global)
     const { spawn } = await import("node:child_process");
@@ -156,18 +155,13 @@ export async function ensureServeRunning(containerName: string): Promise<void> {
   if (process.env.OPENAI_API_KEY) envExports.push(`export OPENAI_API_KEY=${process.env.OPENAI_API_KEY};`);
   if (process.env.ANTHROPIC_API_KEY)
     envExports.push(`export ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY};`);
-  if (process.env.OPENROUTER_API_KEY)
-    envExports.push(`export OPENROUTER_API_KEY=${process.env.OPENROUTER_API_KEY};`);
 
   await execDetach(containerName, [
     "sh",
     "-c",
     `mkdir -p /home/agent/.config/opencode && cat > /home/agent/.config/opencode/opencode.json <<'AUREXCONFIG'
 {
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {}
-  }
+  "$schema": "https://opencode.ai/config.json"
 }
 AUREXCONFIG`,
   ]);

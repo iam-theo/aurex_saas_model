@@ -1,17 +1,18 @@
 import { prisma } from "@aurex/db";
-import { workspaceContainerName, ensureWorkspaceDir, writeFileInWorkspace } from "@aurex/docker";
+import { workspaceContainerName, ensureWorkspaceDir, writeFileInWorkspace, readFileInWorkspace } from "@aurex/docker";
 import {
   projectWorkspacePath,
   workspaceRunDirectory,
-  AUREX_AGENT_SYSTEM_PROMPT,
-  AUREX_AGENT_FILE,
   AUTO_MODEL_ID,
   autoSelectModel,
-  getPrompt,
-  buildSystemPromptForTask,
   agentContextBlock,
   type DetectedProject,
 } from "@aurex/shared";
+import {
+  AUREX_AGENT_SYSTEM_PROMPT,
+  AUREX_AGENT_FILE,
+} from "@aurex/shared/agent-prompt";
+import { getPrompt, buildSystemPromptForTask } from "@aurex/shared/prompts";
 import { nextRunSeq, publishRunEvent } from "./pubsub.js";
 import { ensureWorkspace } from "./workspace.js";
 import {
@@ -29,6 +30,11 @@ import {
 import { homedir } from "node:os";
 import { RUN_TIMEOUT_MS, API_URL, INTERNAL_KEY, HOST_MODE } from "./config.js";
 import { buildPromptParts, resolveModel } from "./ingest.js";
+
+// How long the watcher must see silence (no agent events) before considering a
+// run done. Serve's explicit idle signals are unreliable on long-lived event
+// streams, so a quiet period after real activity is the deterministic signal.
+export const QUIET_COMPLETE_MS = 45_000;
 
 const ALLOWED_HOST_PREFIXES = (() => {
   const home = process.env.HOME ?? homedir() ?? "/home/aurex";
@@ -82,6 +88,8 @@ export interface ActiveRun {
 export interface ActiveRunEntry extends ActiveRun {
   connected: Promise<void>;
   resolveConnected: () => void;
+  lastEventAt: number;
+  completeIfIdle?: () => Promise<void>;
 }/**
  * In-process registry of live agent sessions. The BullMQ job completes after
  * the session is set up; the event stream + status transitions keep running in
@@ -184,24 +192,77 @@ async function timeoutRun(runId: string) {
 
 interface WatcherState {
   textParts: string[];
+  // True once a real assistant answer delta (`text`) has been delivered.
+  // Reasoning/thinking deltas are collected in textParts (for image-marker
+  // detection and result reconstruction) but must NOT count as delivered text:
+  // if they did, a session that went idle mid-thought could be marked
+  // completed while the agent was still working.
+  deliveredText: boolean;
   partText: Map<string, string>;
   toolEmitted: Set<string>;
   userMessageIDs: Set<string>;
   questionsAsked: Set<string>;
   questionsResolved: Set<string>;
   imageGenerationTriggered: boolean;
+  eventCount: number;
 }
 
-function createWatcher(active: ActiveRun) {
+function createWatcher(active: ActiveRunEntry) {
   const state: WatcherState = {
     textParts: [],
+    deliveredText: false,
     partText: new Map(),
     toolEmitted: new Set(),
     userMessageIDs: new Set(),
     questionsAsked: new Set(),
     questionsResolved: new Set(),
     imageGenerationTriggered: false,
+    eventCount: 0,
   };
+  active.lastEventAt = Date.now();
+
+  // Deterministic completion fallback: the serve's idle signals
+  // (`session.idle` / `session.status`) are delivered unreliably to long-lived
+  // event streams, and the stream itself can silently drop (entry deleted).
+  // Completion therefore records lastEventAt here and a module-level sweep
+  // (index.ts) flips the run to completed once it has been quiet for
+  // QUIET_COMPLETE_MS — independent of any single stream's lifetime.
+  active.completeIfIdle = completeRunIfIdle;
+
+  /**
+   * Mark the run completed when the agent session goes idle. Durable: writes
+   * the status update AND a persisted "Agent run completed" event directly, so
+   * completion survives worker restarts and is never lost to SSE-only delivery.
+   * Idempotent: only transitions from "running".
+   *
+   * This is the single enforcement point for the delivered-text gate: every
+   * caller (session.idle, session.status, and the module-level quiet-completion
+   * sweep in index.ts) funnels through here. Reasoning-only output must never
+   * count as delivered — a run that produced only thinking/planning deltas and
+   * then went quiet is still working and must stay "running".
+   */
+  async function completeRunIfIdle() {
+    try {
+      if (!state.deliveredText && !state.imageGenerationTriggered) return;
+      const run = await prisma.agentRun.findUnique({ where: { id: active.runId } }).catch(() => null);
+      if (!run || run.status !== "running") return;
+      const result = state.textParts.join("\n").trim() || null;
+      await prisma.agentRun.update({
+        where: { id: active.runId },
+        data: { status: "completed", result, exitCode: 0, completedAt: new Date() },
+      });
+      const seq = await nextRunSeq(active.runId);
+      const createdAt = new Date().toISOString();
+      await prisma.agentEvent
+        .create({ data: { runId: active.runId, seq, type: "system", data: { text: "Agent run completed" }, createdAt: new Date(createdAt) } })
+        .catch((e) => console.error(`[aurex-worker] failed to persist completion event for ${active.runId}:`, e));
+      await publishRunEvent({ runId: active.runId, seq, type: "system", data: { text: "Agent run completed" }, createdAt, status: "completed" }).catch(() => {});
+      console.log(`[aurex-worker] run ${active.runId} completed (session idle)`);
+      void triggerAutoPublish(run.projectId).catch(() => {});
+    } catch (e) {
+      console.error(`[aurex-worker] completeRunIfIdle failed for ${active.runId}:`, e);
+    }
+  }
 
   async function emit(evt: { type: string; data: unknown; status?: string }) {
     let seq = await nextRunSeq(active.runId);
@@ -245,6 +306,12 @@ function createWatcher(active: ActiveRun) {
         const delta = text.slice(prev.length);
         state.partText.set(partId, text);
         state.textParts.push(delta);
+        // Only a real assistant answer delta (`text`) counts as delivered.
+        // Reasoning deltas are collected in textParts for marker detection and
+        // result reconstruction but must NOT set deliveredText — if they did, a
+        // session that went idle mid-thought could be marked completed while the
+        // agent was still working.
+        if (t === "text") state.deliveredText = true;
 
         // Check for image generation marker in the accumulated text — use part's full text
         // to avoid O(N²) join on every delta; only fallback to join if marker spans deltas
@@ -319,6 +386,14 @@ function createWatcher(active: ActiveRun) {
   async function handle(evt: ServeEvent) {
     const sessionID = eventSessionID(evt);
     if (sessionID && sessionID !== active.sessionId) return;
+    // Ignore serve-internal chatter (`server.heartbeat`, `server.connected`):
+    // it flows continuously even when the agent is idle, and counting it would
+    // keep the lastEventAt clock fresh forever — blocking quiet-completion and
+    // leaving runs stuck in "running" with the chat input locked.
+    if (evt.type.startsWith("server.")) return;
+    if (process.env.AUREX_EVT_DEBUG) console.log(`[aurex-worker][evt] ${evt.type} sid=${sessionID ?? "none"} run=${active.runId}`);
+    state.eventCount += 1;
+    active.lastEventAt = Date.now();
 
     switch (evt.type) {
       case "message.updated": {
@@ -334,24 +409,24 @@ function createWatcher(active: ActiveRun) {
         break;
       }
       case "session.idle": {
-        const run = await prisma.agentRun.findUnique({ where: { id: active.runId } });
-        if (run && run.status === "running") {
-          const result = state.textParts.join("\n").trim() || null;
-          await prisma.agentRun.update({
-            where: { id: active.runId },
-            data: { status: "completed", result, exitCode: 0, completedAt: new Date() },
-          });
-          await publishRunEvent({
-            runId: active.runId,
-            seq: await nextRunSeq(active.runId),
-            type: "system",
-            createdAt: new Date().toISOString(),
-            data: { text: "Agent run completed" },
-            status: "completed",
-          });
-
-          // Auto-publish: if the project is already live, push the latest build.
-          void triggerAutoPublish(run.projectId).catch(() => {});
+        // Only complete when a real assistant answer has been delivered (or image
+        // generation is in flight). A session idle that only ever produced
+        // reasoning/thinking deltas must NOT complete the run — the agent may
+        // still be working.
+        if (state.deliveredText || state.imageGenerationTriggered) {
+          await completeRunIfIdle();
+        }
+        break;
+      }
+      case "session.status": {
+        const st = (props(evt).status as { type?: string } | undefined)?.type;
+        // The serve reports idle both via `session.idle` and `session.status`.
+        // Only complete when a real assistant answer has been delivered (or image
+        // generation is in flight), so a pre-prompt idle at session start can't
+        // complete an empty run — and a mid-thought idle can't complete a run
+        // whose agent is still working.
+        if (st === "idle" && (state.deliveredText || state.imageGenerationTriggered)) {
+          await completeRunIfIdle();
         }
         break;
       }
@@ -478,7 +553,7 @@ export function startWatcher(
     clearTimeout(connectTimer);
     resolveConnected?.();
   };
-  entry = { runId, sessionId, containerName, directory, abort, timer, connected, resolveConnected: finish };
+  entry = { runId, sessionId, containerName, directory, abort, timer, connected, resolveConnected: finish, lastEventAt: Date.now() };
   connectTimer = setTimeout(finish, 10000);
   activeRuns.set(runId, entry);
 
@@ -558,16 +633,22 @@ async function ensureRunDirectory(
   systemPrompt?: string,
 ): Promise<void> {
   await ensureWorkspaceDir(containerName, directory);
-  // Only write AGENTS.md when an explicit prompt is provided (initial run).
-  // Follow-up calls (chat, question answer) must NOT overwrite the file —
-  // the composed prompt from processAgentRun is already there and both
-  // OpenCode (reads AGENTS.md) and OpenRouter (reads it back) depend on it.
+  // Append worker's modular prompts to existing AGENTS.md (don't replace).
+  // The project's AGENTS.md provides base identity; worker adds task-specific capabilities.
   if (systemPrompt) {
-    await writeFileInWorkspace(containerName, `${directory}/${AUREX_AGENT_FILE}`, systemPrompt);
+    const agentFile = `${directory}/${AUREX_AGENT_FILE}`;
+    try {
+      const existing = (await readFileInWorkspace(containerName, agentFile)).content ?? "";
+      const separator = existing ? "\n\n---\n\n# WORKER CAPABILITIES (appended)\n\n" : "";
+      await writeFileInWorkspace(containerName, agentFile, existing + separator + systemPrompt);
+    } catch {
+      // Fallback: write anyway if read fails
+      await writeFileInWorkspace(containerName, agentFile, systemPrompt);
+    }
   }
 }
 
-// --- run setup ----------------------------------------------------------------
+// --- run setup ---
 
 export async function processAgentRun(runId: string, promptId?: string) {
   const run = await prisma.agentRun.findUnique({
@@ -798,6 +879,42 @@ export async function processQuestionAnswer(runId: string, requestId: string, an
   const active = activeRuns.get(runId);
   if (active) {
     resetRunTimeout(runId);
+  }
+}
+
+/**
+ * Re-attach event watchers for runs that are marked running with a session but
+ * have no live in-process watcher (e.g. after a worker crash/restart). This
+ * keeps `session.idle` / `session.status` completion working for orphaned runs
+ * even when no new chat message arrives to re-attach the stream.
+ */
+export async function healOrphanWatchers(): Promise<void> {
+  const orphans = await prisma.agentRun
+    .findMany({
+      where: { status: "running", sessionId: { not: null }, workspaceId: { not: null } },
+      select: { id: true },
+      take: 20,
+    })
+    .catch(() => []);
+  for (const r of orphans) {
+    if (activeRuns.has(r.id)) continue;
+    try {
+      const run = await prisma.agentRun.findUnique({
+        where: { id: r.id },
+        include: { workspace: true, project: true },
+      });
+      if (!run || !run.sessionId || !run.workspaceId || !run.workspace) continue;
+      const containerName = await withRetry("ensureWorkspace", r.id, () =>
+        ensureWorkspace(run.workspaceId!).then((n) => n || workspaceContainerName(run.workspaceId!)),
+      );
+      const hostPath = extractHostPath(run.task);
+      const directory = HOST_MODE && hostPath ? hostPath : runDirectory(run.workspace, run.project?.name ?? "project");
+      await withRetry("ensureServeRunning", r.id, () => ensureServeRunning(containerName));
+      await startWatcher(r.id, run.sessionId, containerName, directory);
+      console.log(`[aurex-worker] re-attached watcher for orphaned run ${r.id}`);
+    } catch (e) {
+      console.warn(`[aurex-worker] heal watcher failed for ${r.id}:`, e instanceof Error ? e.message : String(e));
+    }
   }
 }
 
